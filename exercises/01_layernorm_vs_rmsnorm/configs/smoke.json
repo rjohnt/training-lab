@@ -23,6 +23,7 @@
   ],
   "repeats": 1,
   "epsilon": 1e-06,
+  "compiled_donated_buffer": false,
   "min_samples": 10,
   "min_seconds": 0.03,
   "target_sample_seconds": 0.002,

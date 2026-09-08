@@ -1,0 +1,73 @@
+{
+  "status": "PASS",
+  "purpose": "Correctness and instrumentation pilot; not a performance result",
+  "audit": {
+    "status": "PASS",
+    "case_processes": 24,
+    "timed_blocks": 1510,
+    "operation_calls": 26756,
+    "measured_wall_seconds": 3.900993714,
+    "checks": [
+      "case coverage",
+      "completion",
+      "correctness metadata",
+      "sample hashes",
+      "unique samples",
+      "fixed batch calls",
+      "duration and sample floors",
+      "recomputed medians and percentiles",
+      "allocation accounting",
+      "saved storage accounting"
+    ]
+  },
+  "config": {
+    "schema_version": 1,
+    "seed": 20260908,
+    "rows": [
+      32,
+      4096
+    ],
+    "widths": [
+      8192
+    ],
+    "dtypes": [
+      "bfloat16",
+      "float32"
+    ],
+    "norms": [
+      "layernorm",
+      "rmsnorm"
+    ],
+    "families": [
+      "native",
+      "eager",
+      "compiled"
+    ],
+    "repeats": 1,
+    "epsilon": 1e-06,
+    "compiled_donated_buffer": false,
+    "min_samples": 10,
+    "min_seconds": 0.03,
+    "target_sample_seconds": 0.002,
+    "max_samples": 1000,
+    "warmup_calls": 3,
+    "correctness_seeds": [
+      42,
+      123
+    ],
+    "tolerances": {
+      "float32": {
+        "rtol": 0.0005,
+        "atol": 1e-05
+      },
+      "bfloat16": {
+        "rtol": 0.03,
+        "atol": 0.002
+      }
+    }
+  },
+  "source_sha256": {
+    "benchmark.py": "b5e9c48f4c8ccd286e0e4492848920eaff2ea1aeb5865f70ff0deff959b32a3d",
+    "implementations.py": "38fe064fc40240a475ac8006288e54c98cbd2d576af38502d596f36eac57670a"
+  }
+}

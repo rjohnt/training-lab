@@ -70,6 +70,11 @@ def audit(root):
                 assert s["peak_increment_bytes"] >= s["increment_bytes"]
                 assert s["reserved_bytes"] >= s["allocated_bytes"]
         saved = row["saved_tensors"]
+        assert saved["storages"], "Saved-tensor observation missing"
+        itemsize = {"bfloat16": 2, "float32": 4}[case[3]]
+        assert row["input_bytes"] == case[1] * case[2] * itemsize
+        assert row["weight_bytes"] == case[2] * itemsize
+        assert row["memory"]["training"]["gradient_bytes"] == row["input_bytes"] + row["weight_bytes"]
         assert saved["unique_storage_bytes"] == sum(s["storage_bytes"] for s in saved["storages"])
         assert saved["additional_storage_bytes"] == sum(s["storage_bytes"] for s in saved["storages"] if not s["aliases_input_or_weight"])
         results.append(row)
@@ -98,6 +103,26 @@ def export(manifest, results, checked, out):
     with (out / "timings.csv").open("w") as f:
         writer = csv.DictWriter(f, fieldnames=list(flat[0]), lineterminator="\n")
         writer.writeheader(); writer.writerows(flat)
+    memory = []
+    for r in results:
+        repeat, rows, width, dtype, family, norm = r["case"]
+        inf, train = r["memory"]["inference"], r["memory"]["training"]
+        memory.append(dict(repeat=repeat, rows=rows, width=width, dtype=dtype, family=family, norm=norm,
+                           input_bytes=r["input_bytes"], weight_bytes=r["weight_bytes"],
+                           inference_baseline_bytes=inf["baseline_bytes"],
+                           inference_peak_increment_bytes=inf["stages"][-1]["peak_increment_bytes"],
+                           inference_temporary_estimate_bytes=inf["temporary_estimate_bytes"],
+                           training_baseline_bytes=train["baseline_bytes"],
+                           training_forward_increment_bytes=train["stages"][1]["increment_bytes"],
+                           training_peak_increment_bytes=train["stages"][-1]["peak_increment_bytes"],
+                           training_absolute_peak_bytes=train["baseline_bytes"] + train["stages"][-1]["peak_increment_bytes"],
+                           training_max_reserved_bytes=train["stages"][-1]["max_reserved_bytes"],
+                           gradient_bytes=train["gradient_bytes"],
+                           saved_unique_storage_bytes=r["saved_tensors"]["unique_storage_bytes"],
+                           saved_additional_storage_bytes=r["saved_tensors"]["additional_storage_bytes"]))
+    with (out / "memory.csv").open("w") as f:
+        writer = csv.DictWriter(f, fieldnames=list(memory[0]), lineterminator="\n")
+        writer.writeheader(); writer.writerows(memory)
 
 
 def plots(manifest, results, out):
@@ -107,7 +132,7 @@ def plots(manifest, results, out):
         "full-step": ("Forward + loss + backward", "µs per step", lambda r: r["timings"]["full_step"]["wall"]["p50_us"]),
         "inference": ("Forward-only inference", "µs per call", lambda r: r["timings"]["inference"]["wall"]["p50_us"]),
         "backward": ("Backward on a retained graph", "µs per backward", lambda r: r["timings"]["backward_retained"]["wall"]["p50_us"]),
-        "training-peak": ("Training peak allocation above input baseline", "MiB", lambda r: r["memory"]["training"]["stages"][-1]["peak_increment_bytes"] / 2**20),
+        "training-peak": ("Training peak allocation above warmed baseline", "MiB", lambda r: r["memory"]["training"]["stages"][-1]["peak_increment_bytes"] / 2**20),
         "inference-temporary": ("Inference temporary allocation estimate", "MiB", lambda r: r["memory"]["inference"]["temporary_estimate_bytes"] / 2**20),
         "saved-activations": ("Saved storage excluding input/weight aliases", "MiB", lambda r: r["saved_tensors"]["additional_storage_bytes"] / 2**20),
     }
@@ -182,15 +207,19 @@ def report(manifest, results, checked, out):
             text.append(f"| {family} | {dtype} | {min(ratios):.2f}–{max(ratios):.2f}× | {sum(v>1 for v in ratios)}/{len(ratios)} |")
     for name in ("full-step", "inference", "backward", "training-peak", "inference-temporary", "saved-activations", "allocation-stages"):
         text += ["", f"![{name}]({name}.png)", "", f"[SVG]({name}.svg)"]
+    text += ["", "[Timing CSV](timings.csv) · [Memory CSV](memory.csv) · [Audited summaries](summary.json)", ""]
     text += ["", "## Interpretation limits", "",
              "CUDA-event intervals include launch starvation during ordinary Python calls; they are not graph-replay kernel latency. "
              "The primary wall interval includes event recording and end synchronization, amortized over each calibrated batch. "
              "Backward-only repeats reuse a retained graph; full-step builds a fresh graph and clears gradients to None on every call. "
-             "Full-step includes the fixed weighted-sum loss and excludes optimizer updates.", "",
-             "Allocator-visible bytes are not DRAM traffic or process-wide GPU usage. Saved-storage metadata deduplicates aliases and excludes "
+             "Full-step includes the fixed weighted-sum loss and excludes optimizer updates. "
+             f"Compiler buffer donation is set to {cfg['compiled_donated_buffer']} to support graph reuse; this also constrains "
+             "compiled full-step and memory results relative to default compiler optimization.", "",
+             "Allocator-visible bytes are not DRAM traffic or process-wide GPU usage. The warmed baseline includes inputs, weight, upstream gradients "
+             "and any live runtime buffers; absolute baseline, current and peak values can be recovered from the summaries. Saved-storage metadata deduplicates aliases and excludes "
              "input/weight storage from the additional-storage figure; it excludes the loss's saved tensors. Stage snapshots include the loss, "
              "output and gradient allocations. Stage positions are not elapsed-time measurements. External CUDA allocations may be invisible.", "",
-             "Two nearby process repeats characterize immediate repeatability, not cross-day stability. Compilation and checks are excluded "
+             f"The {cfg['repeats']} process repeat(s) per case characterize this session, not cross-day stability. Compilation and checks are excluded "
              "from warmed timings; first-call records may use persistent compiler caches. Reused buffers, unlocked GPU clocks, display activity "
              "and other host activity limit generalization. Numerical comparisons do not establish equal model quality or drop-in interchangeability.", "",
              "Actual DRAM-traffic counters and detailed allocation-lifetime traces remain separate future profiling work. "

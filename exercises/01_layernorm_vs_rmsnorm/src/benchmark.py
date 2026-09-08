@@ -31,12 +31,14 @@ def worker(cfg, case, out):
     import numpy as np
     import torch
     import triton
+    import torch._functorch.config
     from implementations import build, formula
     repeat, rows, width, dtype_name, family, norm = case
     dtype = getattr(torch, dtype_name)
     torch.set_num_threads(1)
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
+    torch._functorch.config.donated_buffer = cfg["compiled_donated_buffer"]
     torch.manual_seed(cfg["seed"])
     fn = build(norm, family, cfg["epsilon"])
     def data(seed):
@@ -210,6 +212,7 @@ def worker(cfg, case, out):
         return t.detach()
     with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
         y = fn(x, w)  # normalization only; exclude the loss's own saved tensors
+    assert records, "Saved-tensor hooks observed no storage; instrumentation is incomplete"
     saved = {"unique_storage_bytes": sum(r["storage_bytes"] for r in records),
              "additional_storage_bytes": sum(r["storage_bytes"] for r in records if not r["aliases_input_or_weight"]),
              "storages": records}

@@ -1,6 +1,6 @@
 # LayerNorm vs RMSNorm: training runtime and memory overhead
 
-Status: **harness implemented; GPU pilot and sustained measurements pending**.
+Status: **24-case GPU pilot passed; sustained two-repeat measurements running**.
 “Overlaying” means displaying both methods on the same chart with shared axes,
 not running the two operations concurrently.
 
@@ -41,12 +41,28 @@ configuration hashes identify each run. Case and mode order are deterministicall
 shuffled; all workers run sequentially on one GPU. The smoke grid includes the
 largest shape but uses short samples, so it is not a performance result.
 
+The completed [pilot check](results/pilot-check.json) passed all 24 case processes,
+1,510 timed blocks and independent local/remote sample audits. Numerical checks
+include outputs and input/weight gradients before timing plus gradient checks
+after timing. The pilot also validated saved-tensor observation and allocation
+accounting. Its short timings are not published as performance conclusions.
+
 Both CUDA-event and wall intervals surround ordinary Python-call batches. Event
 intervals can include GPU starvation between launches; they are not isolated
 kernel latency. The wall interval includes event-recording and end-synchronization
 costs. The two timing modes are views of the same batches and must not be added
 together. Backward-only retains a fixed graph; full-step creates a new graph and
 clears gradients to `None` each call. Training-forward excludes the loss.
+
+Compiler buffer donation is explicitly disabled (`compiled_donated_buffer=false`)
+in all case processes so the retained-graph backward protocol is supported.
+This also affects compiled full-step and memory results: they represent this
+configuration, not unrestricted default compiler optimization. A default-donation
+fresh-graph comparison is a useful later control.
+
+The initial pilot stopped on its first compiled retained-backward case because
+PyTorch rejected graph reuse with donated buffers. No timings from that failed
+pilot are published as performance results; its raw output is retained privately.
 
 The fixed loss is a sum of FP32 output values times fixed random upstream weights
 scaled by the square root of the element count. Input and scale gradients are
@@ -56,7 +72,8 @@ differ from the eager/compiled FP32 formulas; dtype tolerances are explicit.
 
 Each norm/family/shape/repeat has a fresh process. Memory snapshots follow timing,
 with warmed code and an existing allocator pool; baseline includes persistent
-input, weight and upstream-gradient tensors. Inference retains its output;
+input, weight and upstream-gradient tensors and any live runtime buffers. Absolute
+baseline values are retained alongside increments. Inference retains its output;
 training retains output and loss through backward. Saved-tensor hooks observe
 normalization alone and deduplicate storage, reporting both total saved storage
 and storage beyond aliases of the input/weight. First inference-plus-training
