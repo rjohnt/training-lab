@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "seed": 20260908,
+  "rows": [
+    32,
+    4096
+  ],
+  "widths": [
+    8192
+  ],
+  "dtypes": [
+    "bfloat16",
+    "float32"
+  ],
+  "norms": [
+    "layernorm",
+    "rmsnorm"
+  ],
+  "families": [
+    "native",
+    "eager",
+    "compiled"
+  ],
+  "repeats": 1,
+  "epsilon": 1e-06,
+  "min_samples": 10,
+  "min_seconds": 0.03,
+  "target_sample_seconds": 0.002,
+  "max_samples": 1000,
+  "warmup_calls": 3,
+  "correctness_seeds": [
+    42,
+    123
+  ],
+  "tolerances": {
+    "float32": {
+      "rtol": 0.0005,
+      "atol": 1e-05
+    },
+    "bfloat16": {
+      "rtol": 0.03,
+      "atol": 0.002
+    }
+  }
+}
