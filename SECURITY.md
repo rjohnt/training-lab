@@ -53,8 +53,8 @@ or directory.
 
 ## CI controls
 
-GitHub Actions scans all history on pushes, pull requests, scheduled runs, and
-manual runs. The workflow pins third-party actions to full commit SHAs and grants
+GitHub Actions scans commit changes on pushes and pull requests, and full history
+on scheduled and manual runs. The workflow pins third-party actions to full commit SHAs and grants
 only read access to repository contents. Keep the scan required on the default
 branch once GitHub branch protection is enabled.
 
