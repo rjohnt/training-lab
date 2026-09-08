@@ -21,6 +21,7 @@ controls. The transfer/pipeline study belongs in inference-lab.
 | Exercise | Status |
 | --- | --- |
 | [LayerNorm vs RMSNorm](exercises/01_layernorm_vs_rmsnorm/) | Planned: training latency, peak memory, saved activations and shared-axis comparisons; forward-only inference controls |
+| [Volunteer GPU training on Windows](exercises/02_volunteer_distributed_training/) | Planned: opt-in workers for 2–3 friends, outbound HTTPS coordination, LoRA local updates and time-to-quality comparisons |
 
 [Inference Lab](https://github.com/rjohnt/inference-lab) holds the inference,
 kernel-fusion and host/device data-movement experiments. This lab focuses on
