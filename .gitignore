@@ -1,0 +1,54 @@
+# Python and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Secrets and host-specific configuration
+.env
+.env.*
+!.env.example
+local/
+config/local/
+config/*.local.*
+
+# Large, reproducible, or machine-specific generated files
+artifacts/raw/
+artifacts/models/
+*.nsys-rep
+*.ncu-rep
+*.sqlite
+*.pt
+*.safetensors
+
+# Private planning material
+private/
+
+# Experiment runtime artifacts (publish reviewed compact summaries instead)
+.DS_Store
+.cache/
+build/
+*.egg-info/
+*.so
+*.gguf
+*.log
+*.jsonl
+*.pid
+*.lock
+**/source-prompts.json
+**/prompts.json
+**/models/
+**/hf-cache/
+**/llama-source/
+**/llama-build/
+**/*-command.json
+**/*-metrics.txt
+**/telemetry.json
+**/environment.json
+**/baseline-metadata.json
+**/baseline-final-residency.json
+**/results/**/config.json
+set-runpod-api-key.command
+**/results-*/
+**/probe-*/
+# Already tracked, reviewed results remain tracked; new raw run dirs are ignored.

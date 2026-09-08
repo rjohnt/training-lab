@@ -1,0 +1,7 @@
+title = "Training Lab secret scanning configuration"
+
+[extend]
+useDefault = true
+
+# Add narrowly scoped allowlists only after investigating a false positive. Keep
+# the default rule set active and never allowlist whole configuration directories.
