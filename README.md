@@ -20,7 +20,7 @@ controls. The transfer/pipeline study belongs in inference-lab.
 
 | Exercise | Status |
 | --- | --- |
-| [LayerNorm vs RMSNorm](exercises/01_layernorm_vs_rmsnorm/) | GPU correctness/instrumentation pilot passed; sustained training and memory comparisons running |
+| [LayerNorm vs RMSNorm](exercises/01_layernorm_vs_rmsnorm/) | Measured: 288 fresh-process cases, 1.44M timed batches, runtime and training-memory overlays |
 | [Volunteer GPU training on Windows](exercises/02_volunteer_distributed_training/) | Planned: opt-in workers for 2–3 friends, outbound HTTPS coordination, LoRA local updates and time-to-quality comparisons |
 
 [Inference Lab](https://github.com/rjohnt/inference-lab) holds the inference,

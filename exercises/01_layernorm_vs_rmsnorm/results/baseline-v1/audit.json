@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "case_processes": 288,
+  "timed_blocks": 1440140,
+  "operation_calls": 51305932,
+  "measured_wall_seconds": 3820.4356766030037,
+  "checks": [
+    "case coverage",
+    "completion",
+    "correctness metadata",
+    "sample hashes",
+    "unique samples",
+    "fixed batch calls",
+    "duration and sample floors",
+    "recomputed medians and percentiles",
+    "allocation accounting",
+    "saved storage accounting"
+  ]
+}

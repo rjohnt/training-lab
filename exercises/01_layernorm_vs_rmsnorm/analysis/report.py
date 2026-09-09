@@ -114,6 +114,7 @@ def export(manifest, results, checked, out):
                            inference_temporary_estimate_bytes=inf["temporary_estimate_bytes"],
                            training_baseline_bytes=train["baseline_bytes"],
                            training_forward_increment_bytes=train["stages"][1]["increment_bytes"],
+                           training_forward_peak_increment_bytes=train["stages"][1]["peak_increment_bytes"],
                            training_peak_increment_bytes=train["stages"][-1]["peak_increment_bytes"],
                            training_absolute_peak_bytes=train["baseline_bytes"] + train["stages"][-1]["peak_increment_bytes"],
                            training_max_reserved_bytes=train["stages"][-1]["max_reserved_bytes"],
@@ -131,8 +132,10 @@ def plots(manifest, results, out):
     definitions = {
         "full-step": ("Forward + loss + backward", "µs per step", lambda r: r["timings"]["full_step"]["wall"]["p50_us"]),
         "inference": ("Forward-only inference", "µs per call", lambda r: r["timings"]["inference"]["wall"]["p50_us"]),
+        "training-forward": ("Training forward with autograd", "µs per call", lambda r: r["timings"]["training_forward"]["wall"]["p50_us"]),
         "backward": ("Backward on a retained graph", "µs per backward", lambda r: r["timings"]["backward_retained"]["wall"]["p50_us"]),
         "training-peak": ("Training peak allocation above warmed baseline", "MiB", lambda r: r["memory"]["training"]["stages"][-1]["peak_increment_bytes"] / 2**20),
+        "forward-peak": ("Training-forward peak allocation before the loss", "MiB", lambda r: r["memory"]["training"]["stages"][1]["peak_increment_bytes"] / 2**20),
         "inference-temporary": ("Inference temporary allocation estimate", "MiB", lambda r: r["memory"]["inference"]["temporary_estimate_bytes"] / 2**20),
         "saved-activations": ("Saved storage excluding input/weight aliases", "MiB", lambda r: r["saved_tensors"]["additional_storage_bytes"] / 2**20),
     }
@@ -151,13 +154,13 @@ def plots(manifest, results, out):
                     ax.fill_between(range(len(shapes)), lows, highs, color=color, alpha=.15)
                 ax.set_title(f"{family} · {dtype}")
                 ax.set_xticks(range(len(shapes)), [f"{r}×{w}" for r, w in shapes], rotation=70, fontsize=7)
-                if filename in ("full-step", "inference", "backward", "training-peak"):
+                if filename in ("full-step", "inference", "training-forward", "backward", "training-peak", "forward-peak"):
                     ax.set_yscale("log")
                 else:
                     ax.set_ylim(bottom=0)
                 ax.set_ylabel(unit); ax.grid(alpha=.2); ax.legend(fontsize=8)
         fig.suptitle(title + "\nMedian of repeat medians; shading spans repeats; synchronized wall timing", fontsize=14)
-        if filename not in ("full-step", "inference", "backward"):
+        if filename not in ("full-step", "inference", "training-forward", "backward"):
             fig.suptitle(title + "\nSeparate instrumented passes; median with repeat range", fontsize=14)
         fig.tight_layout(rect=(0, 0, 1, .94))
         fig.savefig(out / f"{filename}.png", dpi=150)
@@ -204,8 +207,10 @@ def report(manifest, results, checked, out):
                 med = {n: np.median([r["timings"]["full_step"]["wall"]["p50_us"] for r in results
                                    if r["case"][1:] == [rows, width, dtype, family, n]]) for n in cfg["norms"]}
                 ratios.append(med["layernorm"] / med["rmsnorm"])
-            text.append(f"| {family} | {dtype} | {min(ratios):.2f}–{max(ratios):.2f}× | {sum(v>1 for v in ratios)}/{len(ratios)} |")
-    for name in ("full-step", "inference", "backward", "training-peak", "inference-temporary", "saved-activations", "allocation-stages"):
+            text.append(f"| {family} | {dtype} | {min(ratios):.3f}–{max(ratios):.3f}× | {sum(v>1 for v in ratios)}/{len(ratios)} |")
+    text += ["", "Ratios above 1 favor RMSNorm. Faster-shape counts describe observed medians, not statistical significance; "
+             "small differences may be within process-repeat variation. Each panel uses its own vertical scale; compare the two norms within a panel.", ""]
+    for name in ("full-step", "inference", "training-forward", "backward", "training-peak", "forward-peak", "inference-temporary", "saved-activations", "allocation-stages"):
         text += ["", f"![{name}]({name}.png)", "", f"[SVG]({name}.svg)"]
     text += ["", "[Timing CSV](timings.csv) · [Memory CSV](memory.csv) · [Audited summaries](summary.json)", ""]
     text += ["", "## Interpretation limits", "",
@@ -218,7 +223,9 @@ def report(manifest, results, checked, out):
              "Allocator-visible bytes are not DRAM traffic or process-wide GPU usage. The warmed baseline includes inputs, weight, upstream gradients "
              "and any live runtime buffers; absolute baseline, current and peak values can be recovered from the summaries. Saved-storage metadata deduplicates aliases and excludes "
              "input/weight storage from the additional-storage figure; it excludes the loss's saved tensors. Stage snapshots include the loss, "
-             "output and gradient allocations. Stage positions are not elapsed-time measurements. External CUDA allocations may be invisible.", "",
+             "output and gradient allocations. The common FP32 weighted-sum loss can dominate the full-step peak, especially with BF16 "
+             "outputs; use the training-forward peak before loss and saved-storage figures to isolate normalization overhead. "
+             "Stage positions are not elapsed-time measurements. External CUDA allocations may be invisible.", "",
              f"The {cfg['repeats']} process repeat(s) per case characterize this session, not cross-day stability. Compilation and checks are excluded "
              "from warmed timings; first-call records may use persistent compiler caches. Reused buffers, unlocked GPU clocks, display activity "
              "and other host activity limit generalization. Numerical comparisons do not establish equal model quality or drop-in interchangeability.", "",

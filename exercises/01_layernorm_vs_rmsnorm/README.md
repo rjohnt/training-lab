@@ -1,6 +1,6 @@
 # LayerNorm vs RMSNorm: training runtime and memory overhead
 
-Status: **24-case GPU pilot passed; sustained two-repeat measurements running**.
+Status: **sustained GPU baseline complete; independently audited and published**.
 “Overlaying” means displaying both methods on the same chart with shared axes,
 not running the two operations concurrently.
 
@@ -10,6 +10,87 @@ allocation, temporary allocation overhead, saved activations, backward-pass cost
 ![Operation and training storage](diagram/theory.png)
 
 [SVG diagram](diagram/theory.svg)
+
+## Measured baseline
+
+The [audited report](results/baseline-v1/report.md) covers 288 fresh case processes,
+**1,440,140 timed batches and 51,305,932 calls** on an RTX 4070 SUPER.
+Measured batches totaled **63.67 minutes**, with **177.58 minutes elapsed** including
+process setup, compilation, checks and separate instrumentation. Each reported
+per-process median uses **1,000–3,112 batch samples**; there are two process repeats
+per configuration. Charts plot the median of repeat medians with their range shaded.
+
+RMSNorm's full forward/loss/backward step was **1.06–1.25× faster for the eager
+formulas** across all 24 shape/dtype combinations. Native timings ranged from
+0.96–1.02× and compiled timings from 0.99–1.08× relative to LayerNorm. Those small
+native/compiled differences should not be treated as universal wins: across all
+wall-timed modes, repeat-median relative spreads had a median of 1.18% and a maximum
+of 8.60% (absolute difference divided by the two-repeat mean). This is one session,
+not a cross-day confidence interval. Compiled buffer donation is disabled as
+explained below; full-step includes the common loss and excludes an optimizer.
+
+![Full training step overlay](results/baseline-v1/full-step.png)
+
+[SVG](results/baseline-v1/full-step.svg)
+
+The strongest memory lesson is the difference between eager intermediates and
+native/compiled implementations. At `[4096,8192]`, the following normalization-only
+saved storage excludes aliases of the existing input and weight. Both process
+repeats gave the same values:
+
+| Implementation | Dtype | LayerNorm saved storage | RMSNorm saved storage |
+| --- | --- | ---: | ---: |
+| Native or compiled | BF16 or FP32 | 32 KiB | 16 KiB |
+| Eager formula | FP32 | 256.016 MiB | 128.016 MiB |
+| Eager formula | BF16 | 256.047 MiB | 256.047 MiB |
+
+The fused implementations' 50% reduction in additional saved storage is only
+**16 KiB in absolute terms**, not a 50% reduction in training memory. The common
+FP32 weighted-sum loss and its backward intermediates can dominate the full-step
+peak, especially for BF16 outputs. Use the forward peak before loss and saved
+storage to isolate normalization overhead. Peak allocator bytes are not DRAM traffic.
+
+![Saved normalization storage overlay](results/baseline-v1/saved-activations.png)
+
+[SVG](results/baseline-v1/saved-activations.svg)
+
+![Training-forward allocation peak overlay](results/baseline-v1/forward-peak.png)
+
+[SVG](results/baseline-v1/forward-peak.svg)
+
+![Full training allocation peak overlay](results/baseline-v1/training-peak.png)
+
+[SVG](results/baseline-v1/training-peak.svg)
+
+![Aligned allocation stages](results/baseline-v1/allocation-stages.png)
+
+[SVG](results/baseline-v1/allocation-stages.svg). Horizontal positions are execution
+stages, not elapsed time. Panels use independent vertical scales; both norms share
+axes within each panel.
+
+<details>
+<summary>Inference, training-forward, backward and temporary-memory overlays</summary>
+
+![Inference overlay](results/baseline-v1/inference.png)
+
+[SVG](results/baseline-v1/inference.svg)
+
+![Training-forward timing overlay](results/baseline-v1/training-forward.png)
+
+[SVG](results/baseline-v1/training-forward.svg)
+
+![Retained-graph backward overlay](results/baseline-v1/backward.png)
+
+[SVG](results/baseline-v1/backward.svg)
+
+![Inference temporary allocation overlay](results/baseline-v1/inference-temporary.png)
+
+[SVG](results/baseline-v1/inference-temporary.svg)
+
+</details>
+
+[Timing CSV](results/baseline-v1/timings.csv) · [Memory CSV](results/baseline-v1/memory.csv) ·
+[Audit](results/baseline-v1/audit.json) · [Manifest and source hashes](results/baseline-v1/manifest.json)
 
 ## Implemented protocol and reproduction
 
@@ -113,7 +194,7 @@ activation metadata. Deduplicate shared storage when calculating footprint, avoi
 retaining additional tensor references, and do not use instrumented timings as
 performance measurements. Report actual peak live allocation as a separate metric.
 
-## Planned measurements
+## Measurement coverage
 
 | Measurement | Method / interpretation |
 | --- | --- |
@@ -123,8 +204,8 @@ performance measurements. Report actual peak live allocation as a separate metri
 | Temporary allocation estimate | Peak increment minus retained output bytes; allocator-visible estimate |
 | Reserved memory | Report separately: the allocator pool is not the same as live tensors |
 | Saved activations and gradients | Separate training captures; deduplicated storage and explicit gradient-buffer policy |
-| Actual GPU memory traffic | Separate Nsight Compute capture; bytes moved are not allocation footprint |
-| Allocation lifetime | Separate instrumented memory trace; never use its timings as benchmark latency |
+| Actual GPU memory traffic (future) | Separate Nsight Compute capture; bytes moved are not allocation footprint |
+| Allocation lifetime (future) | Separate instrumented memory trace; never use its timings as benchmark latency |
 
 Measure cold setup/compilation memory separately from warmed execution. Run memory
 cases in fresh subprocesses to avoid comparing allocator pools left by different
@@ -138,17 +219,13 @@ Specify epsilon explicitly instead of relying on different defaults. Freeze seed
 versions, shapes and sampling rules before collecting results. Use long runs and
 repeated independent passes, numerical checks and independently audited summaries.
 
-## Planned overlays
+## Profiling follow-ups
 
-- Latency versus row width, with both normalizations on the same axes.
-- Peak allocated bytes and temporary overhead versus tensor size, with explicit units.
-- Saved activation and gradient memory, with forward-only and training curves clearly labeled.
-- Allocation timelines over aligned execution windows, labeled as instrumented captures.
-- Nsight kernel timelines where helpful; these are separate from the shared-axis chart overlays.
-
-Use identical axes and distinguish native/eager/compiled implementations. Include
-SVG and PNG versions and embed the measured charts here. Keep raw profiler traces,
-allocator snapshots and machine-specific logs in ignored local storage.
+The nine published overlays cover runtime, allocator peaks, temporary estimates,
+saved storage and synchronized allocation stages. Actual DRAM counters under
+Nsight Compute and detailed allocation-lifetime traces remain future experiments.
+A default-donation fresh-graph compiler control and custom backward kernels are
+also useful next comparisons. Keep instrumented profiles separate from timing.
 
 Dependencies: the shared CUDA/PyTorch environment from
 [the inference-lab kernel-fusion exercise](https://github.com/rjohnt/inference-lab/tree/main/exercises/04_kernel_fusion) and the profiler tooling from
